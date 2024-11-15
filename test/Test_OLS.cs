@@ -62,6 +62,7 @@ for (int i=0; i<tabCount; i++)
 					}
 				}
 
+				// TABLE OBJECT
 				else if (objectType.ToLower() == "table") {
 					if (!Model.Tables.Any(a => a.Name == objectName))
 					{
@@ -82,6 +83,7 @@ for (int i=0; i<tabCount; i++)
 					}
 				}
 
+				// COLUMN OBJECT
 				else if (objectType.ToLower() == "column") {
 					if (!Model.Tables.Any(a => a.Name == tableName))
 					{
@@ -115,6 +117,7 @@ for (int i=0; i<tabCount; i++)
 					}
 				}
 
+				// MEASURE OBJECT
 				else if (objectType.ToLower() == "measure") {
 					if (!Model.AllMeasures.Any(a => a.Name == objectName)) {
 						Error("Object level security for the '"+ro+"' role cannot be created since the '"+objectName+"' measure does not exist.");
@@ -122,17 +125,49 @@ for (int i=0; i<tabCount; i++)
 					}
 
 					foreach(var m in Model.AllMeasures.Where(m => m.Name ==  objectName)) {
-						foreach(var column in m.DependsOn.Columns) {
-							// Assign read permission to user role
-							if (ols.ToLower() == "read") {
-								Model.Tables[column.DaxTableName.Replace("'", "")].Columns[column.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
-							}
-							else if (ols.ToLower() == "none") {
-								Model.Tables[column.DaxTableName.Replace("'", "")].Columns[column.Name].ObjectLevelSecurity[ro] = MetadataPermission.None;
-							}
-							else {
-								Error("Object level security for the '"+ro+"' role cannot be created since the '"+ols+"' permission does not exist.");
-								return;
+						
+						// 2024-11-15 QUANG - Update as getting root columns
+						foreach(var deep in m.DependsOn.Deep()) {
+							
+							string upstreamTable = deep.DaxTableName.Replace("'", "");
+
+							if (
+								deep.DaxObjectFullName.Contains("[")
+								&& deep.DaxObjectFullName.Contains("'")
+								&& upstreamTable.ToLower().StartsWith("fct")
+							) {
+								
+								// Assign read permission to user role
+								if (ols.ToLower() == "read") {
+
+									// Assign Table Read Permission
+									Model.Tables[upstreamTable].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+									
+									// Assign None Permission to all columns as default as read
+									foreach (var c in Model.Tables[upstreamTable].Columns.Where(a => a.ObjectLevelSecurity[ro] == MetadataPermission.Default)) {
+										Model.Tables[upstreamTable].Columns[c.Name].ObjectLevelSecurity[ro] = MetadataPermission.None;
+									}
+
+									// Assign Read Permission to relationship columns in fact tables
+									foreach (var rel in Model.Relationships) {
+										if (rel.FromColumn.DaxTableName.Replace("'", "") == upstreamTable) {
+											Model.Tables[upstreamTable].Columns[rel.FromColumn.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+										}
+										else if (rel.ToColumn.DaxTableName.Replace("'", "") == upstreamTable) {
+											Model.Tables[upstreamTable].Columns[rel.ToColumn.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+										}
+									}
+									
+									Model.Tables[upstreamTable].Columns[deep.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+								}
+								else if (ols.ToLower() == "none") {
+									Model.Tables[upstreamTable].Columns[deep.Name].ObjectLevelSecurity[ro] = MetadataPermission.None;
+								}
+								else {
+									Error("Object level security for the '"+ro+"' role cannot be created since the '"+ols+"' permission does not exist.");
+									return;
+								}
+							
 							}
 						}
 					}
