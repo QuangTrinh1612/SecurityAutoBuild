@@ -100,6 +100,25 @@ for (int i=0; i<tabCount; i++)
 
 					// Assign read permission to user role
 					if (ols.ToLower() == "read") {
+						
+						// Assign Table Read Permission
+						Model.Tables[tableName].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+						
+						// Assign None Permission to all columns as default as read
+						foreach (var c in Model.Tables[tableName].Columns.Where(a => a.ObjectLevelSecurity[ro] == MetadataPermission.Default)) {
+							Model.Tables[tableName].Columns[c.Name].ObjectLevelSecurity[ro] = MetadataPermission.None;
+						}
+
+						// Assign Read Permission to relationship columns in fact tables (mostly PK and FK)
+						foreach (var rel in Model.Relationships) {
+							if (rel.FromColumn.DaxTableName.Replace("'", "") == tableName) {
+								Model.Tables[tableName].Columns[rel.FromColumn.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+							}
+							else if (rel.ToColumn.DaxTableName.Replace("'", "") == tableName) {
+								Model.Tables[tableName].Columns[rel.ToColumn.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
+							}
+						}
+						
 						// 2024-11-14 QUANG - UPDATE as chosen multiple columns based on * character
 						foreach (var c in Model.Tables[tableName].Columns.Where(a => Regex.IsMatch(a.Name, objectName))) {
 							Model.Tables[tableName].Columns[c.Name].ObjectLevelSecurity[ro] = MetadataPermission.Read;
